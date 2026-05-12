@@ -1,0 +1,24 @@
+# Windows
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Editor
+.vscode/
+.idea/
+
+# Node.js (на будущее)
+node_modules/
+npm-debug.log
+package-lock.json
+
+# Сборки
+dist/
+build/
+
+# Логи
+*.log
+
+# Личные файлы
+.env
+*.local
