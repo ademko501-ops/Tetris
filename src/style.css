@@ -1,7 +1,20 @@
 /* =====================================================
-   TETRIS VAULT-TEC — стили, этап R-2
+   TETRIS VAULT-TEC — стили, этап R-3
    Палитра Pip-Boy: тёмный фон + CRT-зелёный #15ff00
    ===================================================== */
+
+/* === Переменные темы и поля ===
+   :root — это "корень" документа (тег <html>). Переменные,
+   объявленные здесь, видны во всех правилах CSS. Их удобно
+   менять в одном месте — масштаб, цвета, размеры поля. */
+:root {
+  --cell-size: 30px;                       /* размер одной клетки */
+  --color-bg: #0a0a0a;                     /* тёмный фон */
+  --color-green: #15ff00;                  /* основной CRT-зелёный */
+  --color-green-glow: rgba(21, 255, 0, 0.4); /* мягкое свечение поля */
+  --cols: 12;                              /* ширина поля в клетках */
+  --rows: 24;                              /* высота поля в клетках */
+}
 
 /* Сбрасываем поля браузера у body и центрируем содержимое.
    flex + column + align-items:center — ставит заголовок и поле
@@ -10,8 +23,8 @@ body {
   margin: 0;
   padding: 20px;
   min-height: 100vh;             /* растянуть на всю высоту окна */
-  background-color: #0a0a0a;     /* очень тёмный фон */
-  color: #15ff00;                /* основной цвет — PIPBOY-зелёный */
+  background-color: var(--color-bg);
+  color: var(--color-green);     /* основной цвет — PIPBOY-зелёный */
   font-family: "Courier New", Consolas, monospace;
   display: flex;
   flex-direction: column;
@@ -22,30 +35,30 @@ body {
 h1 {
   font-size: 32px;
   letter-spacing: 4px;
-  text-shadow: 0 0 8px #15ff00;
+  text-shadow: 0 0 8px var(--color-green);
   margin: 20px 0 30px 0;
 }
 
 /* Игровое поле — пустой контейнер.
-   display: grid с шаблоном 12 колонок × 24 строки задаёт
+   display: grid с шаблоном из --cols колонок × --rows строк задаёт
    "посадочные места" для будущих клеток. JS добавит туда
-   ровно 288 div'ов, и каждый встанет в свою ячейку сетки.
+   ровно (cols × rows) div'ов, и каждый встанет в свою ячейку.
    box-shadow создаёт мягкое зелёное свечение вокруг поля. */
 #game-board {
   display: grid;
-  grid-template-columns: repeat(12, 30px);
-  grid-template-rows: repeat(24, 30px);
-  box-shadow: 0 0 20px rgba(21, 255, 0, 0.4);
+  grid-template-columns: repeat(var(--cols), var(--cell-size));
+  grid-template-rows: repeat(var(--rows), var(--cell-size));
+  box-shadow: 0 0 20px var(--color-green-glow);
 }
 
-/* Базовая клетка поля: 30×30 px, тонкая зелёная рамка,
+/* Базовая клетка поля: размер из переменной, тонкая зелёная рамка,
    тёмный фон. box-sizing: border-box значит, что рамка
-   входит в общий размер 30×30 (а не добавляется сверху). */
+   входит в общий размер клетки (а не добавляется сверху). */
 .cell {
-  width: 30px;
-  height: 30px;
-  background-color: #0a0a0a;
-  border: 1px solid #15ff00;
+  width: var(--cell-size);
+  height: var(--cell-size);
+  background-color: var(--color-bg);
+  border: 1px solid var(--color-green);
   box-sizing: border-box;
 }
 
@@ -54,8 +67,8 @@ h1 {
    приподнимают её над соседями, чтобы свечение не
    обрезалось их тёмным фоном. */
 .filled {
-  background-color: #15ff00;
-  box-shadow: 0 0 8px #15ff00;
+  background-color: var(--color-green);
+  box-shadow: 0 0 8px var(--color-green);
   position: relative;
   z-index: 1;
 }
