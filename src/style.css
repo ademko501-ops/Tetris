@@ -1,0 +1,52 @@
+/* =====================================================
+   TETRIS VAULT-TEC — стили, этап R-1
+   Палитра Pip-Boy: тёмный фон + CRT-зелёный #15ff00
+   ===================================================== */
+
+/* Сбрасываем поля браузера у body и растягиваем на весь экран.
+   flex с column + align-items:center — это способ
+   поставить содержимое (заголовок и поле) по центру по горизонтали. */
+body {
+  margin: 0;
+  padding: 20px;
+  min-height: 100vh;             /* высота экрана целиком */
+  background-color: #0a0a0a;     /* очень тёмный фон */
+  color: #15ff00;                /* основной цвет — PIPBOY-зелёный */
+  font-family: "Courier New", Consolas, monospace; /* моноширинный */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* Заголовок: разрядка букв + лёгкое свечение (text-shadow),
+   чтобы было похоже на ЭЛТ-монитор Fallout. */
+h1 {
+  font-size: 32px;
+  letter-spacing: 4px;
+  text-shadow: 0 0 8px #15ff00;
+  margin: 20px 0 30px 0;
+}
+
+/* Игровое поле:
+   display: grid       — включаем CSS Grid на контейнере
+   12 колонок × 24 строки, каждая клетка ровно 30×30 px
+   gap: 1px            — между клетками промежуток в 1 пиксель
+   background: зелёный — этот зелёный «просвечивает» через gap,
+                         создавая тонкие линии сетки.
+   Сам контейнер с padding:1px даёт ещё и рамку по периметру. */
+#game-board {
+  display: grid;
+  grid-template-columns: repeat(12, 30px);
+  grid-template-rows: repeat(24, 30px);
+  gap: 1px;
+  padding: 1px;
+  background-color: #15ff00;
+  box-shadow: 0 0 20px rgba(21, 255, 0, 0.4); /* мягкое свечение вокруг поля */
+}
+
+/* Каждая клетка — просто тёмный квадратик 30×30.
+   Размер берётся из grid-template, поэтому здесь
+   достаточно задать фон. */
+.cell {
+  background-color: #0a0a0a;
+}
