@@ -1,8 +1,8 @@
 // =====================================================
-// Tetris Vault-Tec — game logic, stage R-3
-// Цель этапа: фигура T падает сверху вниз по таймеру.
-// Раз в FALL_INTERVAL_MS мс опускается на одну строку.
-// Доходит до нижнего края поля и останавливается.
+// Tetris Vault-Tec — game logic, stage R-4
+// Цель этапа: к падающей по таймеру фигуре T добавлено
+// управление стрелками ← / → влево и вправо. За границы
+// поля фигура не уходит. Таймер падения работает как в R-3.
 // Стека пока нет — board заполнен нулями.
 // =====================================================
 
@@ -113,6 +113,39 @@ function dropStep() {
   drawBoard();
 }
 
+// === Управление клавиатурой ===
+// Пытается сдвинуть фигуру на deltaCol колонок по горизонтали.
+// deltaCol = -1 → влево, deltaCol = +1 → вправо.
+// Все проверки границ делаются ДО изменения pieceCol —
+// если новая позиция выходит за поле, ничего не происходит.
+function tryMoveHorizontal(deltaCol) {
+  const newCol = pieceCol + deltaCol;
+
+  // Левый край фигуры в координатах поля после сдвига = newCol.
+  // Правый край = newCol + (ширина фигуры) - 1.
+  // Оба должны лежать внутри поля: от 0 до COLS - 1 включительно.
+  const newLeftEdge = newCol;
+  const newRightEdge = newCol + tShape[0].length - 1;
+  if (newLeftEdge < 0 || newRightEdge > COLS - 1) {
+    return;
+  }
+
+  pieceCol = newCol;
+  drawBoard();
+}
+
+// Слушаем нажатия клавиш на всём документе. event.key —
+// имя нажатой клавиши: 'ArrowLeft' для ←, 'ArrowRight' для →.
+// Остальные клавиши (стрелки ↑/↓, пробел) пока игнорируем —
+// они зарезервированы под повороты (R-8) и быстрый сброс (R-5).
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'ArrowLeft') {
+    tryMoveHorizontal(-1);
+  } else if (event.key === 'ArrowRight') {
+    tryMoveHorizontal(+1);
+  }
+});
+
 // === Запуск ===
 // Тег <script> подключён в конце <body>, поэтому к моменту
 // выполнения этой строки HTML уже распарсен и контейнер
@@ -124,5 +157,5 @@ drawBoard();
 const fallTimer = setInterval(dropStep, FALL_INTERVAL_MS);
 
 // Маяк в консоли DevTools (F12 → Console) — подтверждает,
-// что скрипт запустился и таймер падения активирован.
-console.log("Vault-Tec terminal online. Falling T-piece engaged.");
+// что скрипт запустился, таймер падения активирован, клавиатура слушается.
+console.log("Vault-Tec terminal online. Falling T-piece engaged. Keyboard armed.");
