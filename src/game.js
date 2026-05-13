@@ -53,7 +53,7 @@ let pieceRow = 0;
 let pieceCol = Math.floor((COLS - tShape[0].length) / 2);
 
 // === Отрисовка поля в HTML ===
-// Перерисовывает поле целиком: 288 div-ов (24 × 12).
+// Перерисовывает поле целиком: ROWS × COLS div-ов.
 // Сначала рисует "стек" (board), потом поверх — падающую фигуру.
 function drawBoard() {
   // Находим на странице контейнер с id="game-board".
@@ -126,7 +126,7 @@ function tryMoveHorizontal(deltaCol) {
   // Оба должны лежать внутри поля: от 0 до COLS - 1 включительно.
   const newLeftEdge = newCol;
   const newRightEdge = newCol + tShape[0].length - 1;
-  if (newLeftEdge < 0 || newRightEdge > COLS - 1) {
+  if (newLeftEdge < 0 || newRightEdge >= COLS) {
     return;
   }
 
