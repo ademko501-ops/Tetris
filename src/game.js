@@ -1,8 +1,9 @@
 // =====================================================
-// Tetris Vault-Tec — game logic, stage R-4
-// Цель этапа: к падающей по таймеру фигуре T добавлено
-// управление стрелками ← / → влево и вправо. За границы
-// поля фигура не уходит. Таймер падения работает как в R-3.
+// Tetris Vault-Tec — game logic, stage R-5
+// Цель этапа: пока игрок держит стрелку ↓, фигура падает
+// в 10 раз быстрее (раз в 100 мс вместо 1000 мс). После
+// отпускания клавиши возвращается обычная скорость.
+// Управление ← / → из R-4 и остановка у дна — без изменений.
 // Стека пока нет — board заполнен нулями.
 // =====================================================
 
@@ -13,10 +14,14 @@
 const ROWS = 24;
 const COLS = 12;
 
-// === Скорость падения ===
-// Шаг таймера в миллисекундах. 1000 мс = 1 секунда.
-// Вынесено в именованную константу — легко поменять скорость.
+// === Скорости падения ===
+// FALL_INTERVAL_MS      — обычное падение: один шаг в секунду.
+// FAST_FALL_INTERVAL_MS — ускоренное падение, пока зажата ↓:
+//                         один шаг в 100 мс, то есть в 10 раз быстрее.
+// Обе скорости вынесены в именованные константы — никаких
+// "магических чисел" в коде, легко подкрутить значения.
 const FALL_INTERVAL_MS = 1000;
+const FAST_FALL_INTERVAL_MS = 100;
 
 // === "Память" поля: двумерный массив board ===
 // board[row][col] хранит число:
@@ -51,6 +56,15 @@ const tShape = [
 // симметрично посередине.
 let pieceRow = 0;
 let pieceCol = Math.floor((COLS - tShape[0].length) / 2);
+
+// === Состояние таймера падения ===
+// fallTimer — идентификатор, который вернул setInterval. Через него
+// можно остановить таймер (clearInterval). null означает "таймер не запущен".
+// isFalling — флаг "фигура ещё падает". Становится false, когда фигура
+// упёрлась в дно поля. Защищает от перезапуска таймера после посадки
+// (например, если игрок отпустит ↓ уже после касания пола).
+let fallTimer = null;
+let isFalling = true;
 
 // === Отрисовка поля в HTML ===
 // Перерисовывает поле целиком: ROWS × COLS div-ов.
@@ -104,13 +118,31 @@ function dropStep() {
   // что равносильно: pieceRow + tShape.length < ROWS.
   // Если условие нарушено — фигура уже на дне, стоп.
   if (pieceRow + tShape.length >= ROWS) {
+    isFalling = false;
     clearInterval(fallTimer);
+    fallTimer = null;
     console.log("Vault-Tec terminal: T-piece reached the floor.");
     return;
   }
 
   pieceRow++;
   drawBoard();
+}
+
+// === Запуск / переключение таймера падения ===
+// Останавливает предыдущий таймер (если он был) и запускает новый
+// с указанным интервалом. Используется и при старте игры, и при
+// переключении между обычной и ускоренной скоростью падения.
+// Если фигура уже на дне (isFalling === false) — ничего не делает,
+// чтобы случайно не "оживить" посаженную фигуру.
+function startFallTimer(intervalMs) {
+  if (!isFalling) {
+    return;
+  }
+  if (fallTimer !== null) {
+    clearInterval(fallTimer);
+  }
+  fallTimer = setInterval(dropStep, intervalMs);
 }
 
 // === Управление клавиатурой ===
@@ -135,14 +167,33 @@ function tryMoveHorizontal(deltaCol) {
 }
 
 // Слушаем нажатия клавиш на всём документе. event.key —
-// имя нажатой клавиши: 'ArrowLeft' для ←, 'ArrowRight' для →.
-// Остальные клавиши (стрелки ↑/↓, пробел) пока игнорируем —
-// они зарезервированы под повороты (R-8) и быстрый сброс (R-5).
+// имя нажатой клавиши: 'ArrowLeft' / 'ArrowRight' для ←/→,
+// 'ArrowDown' для ускоренного падения. Стрелка ↑ и пробел
+// пока игнорируются — они зарезервированы под повороты (R-7)
+// и мгновенный сброс (R-8).
 document.addEventListener('keydown', (event) => {
   if (event.key === 'ArrowLeft') {
     tryMoveHorizontal(-1);
   } else if (event.key === 'ArrowRight') {
     tryMoveHorizontal(+1);
+  } else if (event.key === 'ArrowDown') {
+    // event.repeat === true — ОС-автоповтор при удержании клавиши.
+    // Переключение на ускоренный режим делается один раз, при
+    // первом нажатии. Дальнейшие "повторы" игнорируем, иначе будем
+    // зря дёргать clearInterval/setInterval каждые 30-50 мс.
+    if (event.repeat) {
+      return;
+    }
+    startFallTimer(FAST_FALL_INTERVAL_MS);
+  }
+});
+
+// Отпускание клавиши: для ↓ возвращаем обычную скорость.
+// Если фигура к этому моменту уже на дне — startFallTimer
+// увидит isFalling === false и просто ничего не сделает.
+document.addEventListener('keyup', (event) => {
+  if (event.key === 'ArrowDown') {
+    startFallTimer(FALL_INTERVAL_MS);
   }
 });
 
@@ -152,10 +203,10 @@ document.addEventListener('keydown', (event) => {
 // #game-board точно существует на странице.
 drawBoard();
 
-// Запускаем таймер: dropStep будет вызываться каждые FALL_INTERVAL_MS мс,
-// пока его не остановит clearInterval внутри самого dropStep.
-const fallTimer = setInterval(dropStep, FALL_INTERVAL_MS);
+// Стартуем таймер на обычной скорости. Дальше скорость может
+// переключаться нажатиями ↓ (через тот же startFallTimer).
+startFallTimer(FALL_INTERVAL_MS);
 
 // Маяк в консоли DevTools (F12 → Console) — подтверждает,
 // что скрипт запустился, таймер падения активирован, клавиатура слушается.
-console.log("Vault-Tec terminal online. Falling T-piece engaged. Keyboard armed.");
+console.log("Vault-Tec terminal online. Falling T-piece engaged. Keyboard armed (←/→/↓).");
