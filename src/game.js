@@ -27,7 +27,7 @@ const FAST_FALL_INTERVAL_MS = 100;
 // board[row][col] хранит число:
 //   0 — клетка пустая,
 //   1 — клетка занята (часть осевшего стека).
-// На этапе R-3 стека ещё нет, массив остаётся целиком нулевым.
+// Стека пока нет, массив остаётся целиком нулевым.
 const board = [];
 for (let row = 0; row < ROWS; row++) {
   // Для каждой строки делаем массив из COLS нулей и кладём в board.
@@ -121,7 +121,6 @@ function dropStep() {
     isFalling = false;
     clearInterval(fallTimer);
     fallTimer = null;
-    console.log("Vault-Tec terminal: T-piece reached the floor.");
     return;
   }
 

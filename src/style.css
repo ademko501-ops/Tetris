@@ -12,8 +12,11 @@
   --color-bg: #0a0a0a;                     /* тёмный фон */
   --color-green: #15ff00;                  /* основной CRT-зелёный */
   --color-green-glow: rgba(21, 255, 0, 0.4); /* мягкое свечение поля = #15ff00 с прозрачностью 0.4 (CSS не умеет собирать rgba из hex-переменной, поэтому компоненты записаны числами) */
+  --color-amber: #ffb000;                  /* янтарный акцент Pip-Boy (пока не используется, задел под счёт / уровни / Next) */
   --cols: 12;                              /* ширина поля в клетках */
   --rows: 24;                              /* высота поля в клетках */
+  --font-size-title: 32px;                 /* размер шрифта главного заголовка */
+  --letter-spacing-title: 4px;             /* разрядка букв заголовка */
 }
 
 /* Сбрасываем поля браузера у body и центрируем содержимое.
@@ -33,8 +36,8 @@ body {
 
 /* Заголовок с разрядкой букв и лёгким свечением — стиль CRT. */
 h1 {
-  font-size: 32px;
-  letter-spacing: 4px;
+  font-size: var(--font-size-title);
+  letter-spacing: var(--letter-spacing-title);
   text-shadow: 0 0 8px var(--color-green);
   margin: 20px 0 30px 0;
 }
