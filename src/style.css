@@ -1,6 +1,6 @@
 /* =====================================================
    TETRIS VAULT-TEC — стили
-   Палитра Pip-Boy: тёмный фон + CRT-зелёный #15ff00
+   Палитра Pip-Boy (UI) + семь цветов тетромино (R-7)
    ===================================================== */
 
 /* === Переменные темы и поля ===
@@ -10,13 +10,26 @@
 :root {
   --cell-size: 30px;                       /* размер одной клетки */
   --color-bg: #0a0a0a;                     /* тёмный фон */
-  --color-green: #15ff00;                  /* основной CRT-зелёный */
+  --color-green: #15ff00;                  /* основной CRT-зелёный (UI: рамка, заголовок) */
   --color-green-glow: rgba(21, 255, 0, 0.4); /* мягкое свечение поля = #15ff00 с прозрачностью 0.4 (CSS не умеет собирать rgba из hex-переменной, поэтому компоненты записаны числами) */
   --color-amber: #ffb000;                  /* янтарный акцент Pip-Boy (пока не используется, задел под счёт / уровни / Next) */
   --cols: 12;                              /* ширина поля в клетках */
   --rows: 24;                              /* высота поля в клетках */
   --font-size-title: 32px;                 /* размер шрифта главного заголовка */
   --letter-spacing-title: 4px;             /* разрядка букв заголовка */
+
+  /* === Цвета семи тетромино (R-7) === */
+  /* Один цвет на фигуру. Применяются через классы .piece-I ... .piece-J
+     ниже (game.js навешивает их в drawBoard вместе с .filled). */
+  --color-piece-I: #39FF14;                /* I — неоновый зелёный */
+  --color-piece-O: #F4C542;                /* O — золотистый жёлтый */
+  --color-piece-T: #1F4E8C;                /* T — глубокий синий */
+  --color-piece-S: #A6FF00;                /* S — лаймовый */
+  --color-piece-Z: #B22222;                /* Z — кирпично-красный */
+  --color-piece-J: #B45A2A;                /* J — рыжий-коричневый */
+  --color-piece-L: #5A3A22;                /* L — тёмно-коричневый */
+
+  --glow-radius-sm: 8px;                   /* радиус мягкого свечения вокруг фигуры */
 }
 
 /* Сбрасываем поля браузера у body и центрируем содержимое.
@@ -65,13 +78,45 @@ h1 {
   box-sizing: border-box;
 }
 
-/* Заполненная клетка (часть фигуры): зелёная заливка
-   + свечение наружу. position: relative + z-index
-   приподнимают её над соседями, чтобы свечение не
-   обрезалось их тёмным фоном. */
+/* Заполненная клетка (часть фигуры или стек). Класс только
+   структурный — поднимает клетку над соседями, чтобы свечение
+   не обрезалось их тёмным фоном. Цвет фона и свечения задаётся
+   отдельным классом .piece-<id> ниже; drawBoard в game.js всегда
+   навешивает оба класса вместе. */
 .filled {
-  background-color: var(--color-green);
-  box-shadow: 0 0 8px var(--color-green);
   position: relative;
   z-index: 1;
+}
+
+/* === Цвета семи тетромино (R-7) === */
+/* Каждый класс делает одно и то же: красит клетку в свой цвет
+   и добавляет мягкое свечение того же цвета. Применяется вместе
+   с .filled — drawBoard() добавляет оба класса сразу. */
+.piece-I {
+  background-color: var(--color-piece-I);
+  box-shadow: 0 0 var(--glow-radius-sm) var(--color-piece-I);
+}
+.piece-O {
+  background-color: var(--color-piece-O);
+  box-shadow: 0 0 var(--glow-radius-sm) var(--color-piece-O);
+}
+.piece-T {
+  background-color: var(--color-piece-T);
+  box-shadow: 0 0 var(--glow-radius-sm) var(--color-piece-T);
+}
+.piece-S {
+  background-color: var(--color-piece-S);
+  box-shadow: 0 0 var(--glow-radius-sm) var(--color-piece-S);
+}
+.piece-Z {
+  background-color: var(--color-piece-Z);
+  box-shadow: 0 0 var(--glow-radius-sm) var(--color-piece-Z);
+}
+.piece-J {
+  background-color: var(--color-piece-J);
+  box-shadow: 0 0 var(--glow-radius-sm) var(--color-piece-J);
+}
+.piece-L {
+  background-color: var(--color-piece-L);
+  box-shadow: 0 0 var(--glow-radius-sm) var(--color-piece-L);
 }
