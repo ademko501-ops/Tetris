@@ -171,6 +171,20 @@ function tryMoveHorizontal(deltaCol) {
 // пока игнорируются — они зарезервированы под повороты (R-7)
 // и мгновенный сброс (R-8).
 document.addEventListener('keydown', (event) => {
+  // Поведение браузера по умолчанию: стрелка ↓ листает страницу вниз,
+  // ←/→ могут прокручивать горизонтально внутри прокручиваемых блоков.
+  // Для тех трёх клавиш, которыми играем сами, отключаем дефолт сразу
+  // в начале — иначе во время игры страница уезжает под фигурой.
+  // ArrowUp и пробел НЕ блокируем: их логика появится в R-7 / R-8,
+  // там и решим, надо ли им preventDefault.
+  if (
+    event.key === 'ArrowLeft' ||
+    event.key === 'ArrowRight' ||
+    event.key === 'ArrowDown'
+  ) {
+    event.preventDefault();
+  }
+
   if (event.key === 'ArrowLeft') {
     tryMoveHorizontal(-1);
   } else if (event.key === 'ArrowRight') {
