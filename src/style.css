@@ -17,6 +17,7 @@
   --rows: 24;                              /* высота поля в клетках */
   --font-size-title: 32px;                 /* размер шрифта главного заголовка */
   --letter-spacing-title: 4px;             /* разрядка букв заголовка */
+  --spacing-base: 20px;                    /* базовый отступ страницы (body padding, верх/низ заголовка) */
 
   /* === Цвета семи тетромино (R-7) === */
   /* Один цвет на фигуру. Применяются через классы .piece-I ... .piece-J
@@ -37,7 +38,7 @@
    ровно по центру по горизонтали. */
 body {
   margin: 0;
-  padding: 20px;
+  padding: var(--spacing-base);
   min-height: 100vh;             /* растянуть на всю высоту окна */
   background-color: var(--color-bg);
   color: var(--color-green);     /* основной цвет — PIPBOY-зелёный */
@@ -51,8 +52,8 @@ body {
 h1 {
   font-size: var(--font-size-title);
   letter-spacing: var(--letter-spacing-title);
-  text-shadow: 0 0 8px var(--color-green);
-  margin: 20px 0 30px 0;
+  text-shadow: 0 0 var(--glow-radius-sm) var(--color-green);
+  margin: var(--spacing-base) 0 30px 0;
 }
 
 /* Игровое поле — пустой контейнер.
