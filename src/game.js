@@ -1,12 +1,13 @@
 // =====================================================
-// Tetris Vault-Tec — game logic, stage R-9
-// Цель этапа: мгновенный сброс фигуры по пробелу
-// (hard drop) и удаление заполненных линий стека.
-// Hard drop опускает фигуру вниз до упора без таймера
-// и сразу фиксирует. После фиксации (и из таймера тоже)
-// проверяется стек: каждая полностью заполненная строка
-// удаляется, сверху добавляется пустая. Счёт удалённых
-// линий возвращается из freezePiece — пригодится в R-10.
+// Tetris Vault-Tec — game logic, stage R-10
+// Цель этапа: очки, уровень и табло справа от поля.
+// Очки начисляются по таблице Nintendo (1/2/3/4 линии =
+// 40/100/300/1200 базовых, умножается на (level + 1)).
+// Уровень растёт через каждые 10 удалённых линий и
+// ускоряет падение по линейной формуле
+//   max(MIN_FALL_INTERVAL_MS, BASE - level * STEP).
+// freezePiece из R-9 уже возвращает count удалённых
+// линий — здесь этот результат впервые читается.
 // =====================================================
 
 // === Размеры поля ===
@@ -16,10 +17,29 @@ const ROWS = 24;
 const COLS = 12;
 
 // === Скорости падения ===
-// FALL_INTERVAL_MS      — обычное падение: один шаг в секунду.
-// FAST_FALL_INTERVAL_MS — ускоренное падение, пока зажата ↓.
-const FALL_INTERVAL_MS = 1000;
+// BASE_FALL_INTERVAL_MS — обычное падение на УРОВНЕ 0 (старт игры).
+//                         С каждым уровнем уменьшается на LEVEL_SPEED_STEP_MS,
+//                         но не ниже MIN_FALL_INTERVAL_MS. См. computeFallInterval ниже.
+// FAST_FALL_INTERVAL_MS — soft drop (зажатая ↓), всегда 100 мс независимо от уровня.
+// LEVEL_SPEED_STEP_MS   — насколько ускоряется обычное падение с каждым уровнем.
+// MIN_FALL_INTERVAL_MS  — нижняя планка для обычной скорости (cap),
+//                         чтобы игра не стала неиграбельной на высоких уровнях.
+const BASE_FALL_INTERVAL_MS = 1000;
 const FAST_FALL_INTERVAL_MS = 100;
+const LEVEL_SPEED_STEP_MS = 80;
+const MIN_FALL_INTERVAL_MS = 100;
+
+// === Система очков (Nintendo) ===
+// LINE_SCORES[count] — базовые очки за одновременное удаление count линий.
+// Реальное начисление: LINE_SCORES[count] * (level + 1).
+// Индексы 0..4: 0 — ничего не удалили (0 очков); 4 — «Tetris» (1200 базовых).
+// Больше 4 за один раз невозможно — фигура максимум занимает 4 строки.
+const LINE_SCORES = [0, 40, 100, 300, 1200];
+
+// === Параметры роста уровня ===
+// LINES_PER_LEVEL — сколько линий надо удалить за всю партию, чтобы
+// уровень вырос на 1. Уровень = floor(linesTotal / LINES_PER_LEVEL).
+const LINES_PER_LEVEL = 10;
 
 // === Каталог фигур (single source of truth) ===
 // Семь классических тетромино. Каждая запись:
@@ -146,6 +166,15 @@ let currentBag = [];
 // fallTimer — идентификатор, который вернул setInterval. Через него
 // можно остановить таймер (clearInterval). null = «таймера нет».
 let fallTimer = null;
+
+// === Состояние счёта (R-10) ===
+// score      — суммарные очки за партию.
+// linesTotal — суммарное количество удалённых линий за партию.
+// level      — текущий уровень = floor(linesTotal / LINES_PER_LEVEL).
+//              Влияет на скорость падения и на множитель очков.
+let score = 0;
+let linesTotal = 0;
+let level = 0;
 
 // === Создание нового перетасованного мешка ===
 // Возвращает копию массива SHAPES в случайном порядке.
@@ -343,19 +372,74 @@ function spawnNewPiece() {
   pieceCol = Math.floor((COLS - currentShape[0].length) / 2);
 }
 
+// === Скорость падения на данном уровне ===
+// Линейная кривая: на каждый уровень падение ускоряется
+// на LEVEL_SPEED_STEP_MS мс, но не ниже MIN_FALL_INTERVAL_MS.
+// Уровень 0  → 1000 мс  (start)
+// Уровень 5  →  600 мс
+// Уровень 10 →  200 мс
+// Уровень 12 →  100 мс  (cap, дальше всё на минимуме)
+function computeFallInterval(currentLevel) {
+  const raw = BASE_FALL_INTERVAL_MS - currentLevel * LEVEL_SPEED_STEP_MS;
+  return Math.max(MIN_FALL_INTERVAL_MS, raw);
+}
+
+// === Обработка результата фиксации фигуры ===
+// Принимает count — число удалённых линий за этот freezePiece (0..4).
+// Делает три вещи:
+//   1) начисляет очки по таблице Nintendo, умноженные на (level + 1);
+//   2) увеличивает linesTotal;
+//   3) проверяет, не перешёл ли игрок на новый уровень, и если да —
+//      перезапускает таймер на новой (более быстрой) скорости.
+// В конце обновляет HTML-табло.
+//
+// Вызывается из dropStep и hardDrop сразу после freezePiece().
+// При count === 0 (фигура села, но линии не очистились) функция всё
+// равно зовётся: drawScorePanel перерисует панель (на случай, если
+// уровень изменился из-за предыдущих линий — на самом деле такого не
+// будет, но защита от рассинхрона).
+function applyCleared(count) {
+  if (count > 0) {
+    score += LINE_SCORES[count] * (level + 1);
+    linesTotal += count;
+
+    const newLevel = Math.floor(linesTotal / LINES_PER_LEVEL);
+    if (newLevel !== level) {
+      level = newLevel;
+      // Уровень вырос → таймер ускоряется. Если в момент level-up игрок
+      // удерживал ↓ (soft drop), его скорость на короткое время заменится
+      // на скорость уровня — keyup ↓ её всё равно перепишет на правильную.
+      startFallTimer(computeFallInterval(level));
+    }
+  }
+  drawScorePanel();
+}
+
+// === Отрисовка табло SCORE / LEVEL / LINES ===
+// Простое обновление текста в трёх HTML-элементах. Вызывается из
+// applyCleared (после изменения счёта) и один раз при старте — чтобы
+// синхронизировать панель с state-переменными, даже если HTML
+// показывает нули по умолчанию.
+function drawScorePanel() {
+  document.getElementById('score-value').textContent = score;
+  document.getElementById('level-value').textContent = level;
+  document.getElementById('lines-value').textContent = linesTotal;
+}
+
 // === Шаг падения по таймеру ===
-// Раз в FALL_INTERVAL_MS / FAST_FALL_INTERVAL_MS мс эту функцию
-// вызывает setInterval. Логика:
+// Раз в computeFallInterval(level) мс (или FAST_FALL_INTERVAL_MS,
+// если зажата ↓) эту функцию вызывает setInterval. Логика:
 //   - если фигура может опуститься на одну строку — опускаем;
 //   - если не может (упёрлась в стек или дно) — впечатываем её в
-//     stack (с попутным удалением заполненных линий) и спавним
-//     следующую.
+//     stack (с попутным удалением заполненных линий), начисляем
+//     очки через applyCleared и спавним следующую.
 // Таймер при этом НЕ останавливается: новая фигура подхватывает темп.
 function dropStep() {
   if (canMove(currentShape, 1, 0)) {
     pieceRow++;
   } else {
-    freezePiece();
+    const cleared = freezePiece();
+    applyCleared(cleared);
     spawnNewPiece();
   }
   drawBoard();
@@ -372,7 +456,8 @@ function hardDrop() {
   while (canMove(currentShape, 1, 0)) {
     pieceRow++;
   }
-  freezePiece();
+  const cleared = freezePiece();
+  applyCleared(cleared);
   spawnNewPiece();
   drawBoard();
 }
@@ -573,29 +658,37 @@ document.addEventListener('keydown', (event) => {
 });
 
 // Отпускание клавиши: для ↓ возвращаем обычную скорость падения.
+// «Обычная» теперь зависит от уровня — берём из computeFallInterval(level).
 // Если ↓ всё ещё держится, когда новая фигура спавнится — она
 // продолжит падать ускоренно. Это поведение из канона Тетриса.
 document.addEventListener('keyup', (event) => {
   if (event.code === 'ArrowDown') {
-    startFallTimer(FALL_INTERVAL_MS);
+    startFallTimer(computeFallInterval(level));
   }
 });
 
 // === Запуск ===
 // Тег <script> подключён в конце <body>, поэтому к моменту
-// выполнения этой строки HTML уже распарсен и контейнер
-// #game-board точно существует на странице.
+// выполнения этой строки HTML уже распарсен — контейнеры
+// #game-board и #score-panel точно существуют на странице.
 // Сначала ставим первую фигуру в стартовую позицию (тот же
 // spawnNewPiece, что вызывается при фиксации) — формула живёт
 // в одном месте, мешок 7-bag создаётся при первом обращении.
 spawnNewPiece();
 drawBoard();
 
-// Стартуем таймер на обычной скорости. Дальше скорость может
-// переключаться нажатиями ↓ (через тот же startFallTimer).
-startFallTimer(FALL_INTERVAL_MS);
+// Стартовая синхронизация табло с state-переменными (0 / 0 / 0).
+// HTML уже показывает нули, но если вдруг state поменялся до старта
+// (например, при hot-reload в будущем), это всё равно даст консистентность.
+drawScorePanel();
+
+// Стартуем таймер на скорости уровня 0 (= BASE_FALL_INTERVAL_MS).
+// Дальше скорость переключается через тот же startFallTimer:
+// soft drop ↓ → FAST, отпускание ↓ → computeFallInterval(level),
+// level-up в applyCleared → computeFallInterval(level).
+startFallTimer(computeFallInterval(level));
 
 // Маяк в консоли DevTools (F12 → Console) — подтверждает,
 // что скрипт запустился, мешок фигур загружен, таймер падения
-// активирован, стек живой, клавиатура слушается.
-console.log("Vault-Tec terminal online. Seven-piece bag loaded. Stack initialised. Keyboard armed (←/→/↑/↓/Space).");
+// активирован, стек живой, табло синхронизировано, клавиатура слушается.
+console.log("Vault-Tec terminal online. Seven-piece bag loaded. Stack initialised. Score panel armed. Keyboard armed (←/→/↑/↓/Space).");

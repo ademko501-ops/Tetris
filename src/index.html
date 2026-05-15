@@ -8,11 +8,35 @@
 <body>
   <h1>TETRIS VAULT-TEC</h1>
 
-  <!-- Игровое поле: пустой контейнер.
-       Клетки внутрь добавляет JavaScript (см. game.js → drawBoard).
-       Так удобнее, потому что на следующих этапах содержимое поля
-       будет меняться (падение, повороты), и JS просто перерисует. -->
-  <div id="game-board"></div>
+  <!-- Обёртка-флексбокс: слева игровое поле, справа табло (R-10).
+       На этапах R-1..R-9 поле было прямо в body; в R-10 появилась
+       панель счёта, и удобнее, чтобы они стояли в строку. -->
+  <div id="game-wrapper">
+
+    <!-- Игровое поле: пустой контейнер.
+         Клетки внутрь добавляет JavaScript (см. game.js → drawBoard). -->
+    <div id="game-board"></div>
+
+    <!-- Табло SCORE / LEVEL / LINES (R-10).
+         Значения обновляет drawScorePanel() из game.js.
+         Стартовые "0" в HTML — чтобы при загрузке страницы
+         (до выполнения JS) пользователь не видел пустые места. -->
+    <aside id="score-panel">
+      <div class="panel-row">
+        <div class="panel-label">SCORE</div>
+        <div class="panel-value" id="score-value">0</div>
+      </div>
+      <div class="panel-row">
+        <div class="panel-label">LEVEL</div>
+        <div class="panel-value" id="level-value">0</div>
+      </div>
+      <div class="panel-row">
+        <div class="panel-label">LINES</div>
+        <div class="panel-value" id="lines-value">0</div>
+      </div>
+    </aside>
+
+  </div>
 
   <script src="game.js"></script>
 </body>

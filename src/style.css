@@ -12,7 +12,7 @@
   --color-bg: #0a0a0a;                     /* тёмный фон */
   --color-green: #15ff00;                  /* основной CRT-зелёный (UI: рамка, заголовок) */
   --color-green-glow: rgba(21, 255, 0, 0.4); /* мягкое свечение поля = #15ff00 с прозрачностью 0.4 (CSS не умеет собирать rgba из hex-переменной, поэтому компоненты записаны числами) */
-  --color-amber: #ffb000;                  /* янтарный акцент Pip-Boy (пока не используется, задел под счёт / уровни / Next) */
+  --color-amber: #ffb000;                  /* янтарный акцент Pip-Boy (цифры на табло SCORE / LEVEL / LINES, R-10) */
   --cols: 12;                              /* ширина поля в клетках */
   --rows: 24;                              /* высота поля в клетках */
   --font-size-title: 32px;                 /* размер шрифта главного заголовка */
@@ -33,6 +33,16 @@
   --glow-radius-sm: 8px;                   /* радиус мягкого свечения вокруг фигуры и заголовка */
   --glow-radius-lg: 20px;                  /* радиус большого свечения вокруг игрового поля */
   --spacing-title-bottom: 30px;            /* отступ под заголовком до игрового поля (нестандартный, поэтому не --spacing-base) */
+
+  /* === Параметры табло (R-10) === */
+  /* Используются классами .panel-* ниже; здесь, чтобы все размеры
+     панели жили в одном месте и легко правились. */
+  --panel-min-width: 140px;                /* минимальная ширина табло — чтобы числа не «прыгали» при росте */
+  --panel-gap-h: 30px;                     /* промежуток между игровым полем и панелью */
+  --panel-gap-v: 20px;                     /* промежуток между строками панели (SCORE / LEVEL / LINES) */
+  --font-size-panel-label: 14px;           /* размер подписи SCORE / LEVEL / LINES */
+  --font-size-panel-value: 28px;           /* размер самой цифры */
+  --letter-spacing-panel-label: 2px;       /* разрядка букв подписи (в духе CRT-меток) */
 }
 
 /* Сбрасываем поля браузера у body и центрируем содержимое.
@@ -122,4 +132,51 @@ h1 {
 .piece-L {
   background-color: var(--color-piece-L);
   box-shadow: 0 0 var(--glow-radius-sm) var(--color-piece-L);
+}
+
+/* === Табло SCORE / LEVEL / LINES (R-10) === */
+/* Обёртка кладёт игровое поле и панель в строку. Это нужно
+   только когда появилась панель — до R-10 поле было одним
+   ребёнком body. */
+#game-wrapper {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: var(--panel-gap-h);
+}
+
+/* Сама панель: рамка в духе игрового поля, тёмный фон,
+   мягкое зелёное свечение по периметру. */
+#score-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--panel-gap-v);
+  min-width: var(--panel-min-width);
+  padding: var(--spacing-base);
+  background-color: var(--color-bg);
+  border: 1px solid var(--color-green);
+  box-shadow: 0 0 var(--glow-radius-lg) var(--color-green-glow);
+  box-sizing: border-box;
+}
+
+/* Одна строка панели: подпись сверху, цифра снизу. */
+.panel-row {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Подпись (SCORE / LEVEL / LINES) — зелёная, мелкая, в разрядку. */
+.panel-label {
+  font-size: var(--font-size-panel-label);
+  letter-spacing: var(--letter-spacing-panel-label);
+  color: var(--color-green);
+  text-shadow: 0 0 var(--glow-radius-sm) var(--color-green);
+}
+
+/* Цифра — крупно, янтарным цветом Pip-Boy (--color-amber из R-5
+   задумывался именно под счёт; здесь применяется впервые). */
+.panel-value {
+  font-size: var(--font-size-panel-value);
+  color: var(--color-amber);
+  text-shadow: 0 0 var(--glow-radius-sm) var(--color-amber);
 }
