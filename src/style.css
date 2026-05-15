@@ -163,6 +163,7 @@ h1 {
 .panel-row {
   display: flex;
   flex-direction: column;
+  align-items: flex-start;       /* явное выравнивание — на случай если в будущем внутрь добавится иконка / картинка, чтобы она не растягивалась */
 }
 
 /* Подпись (SCORE / LEVEL / LINES) — зелёная, мелкая, в разрядку. */

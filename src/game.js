@@ -400,6 +400,14 @@ function computeFallInterval(currentLevel) {
 // будет, но защита от рассинхрона).
 function applyCleared(count) {
   if (count > 0) {
+    // Защита от потенциального count > 4: clearLines гарантирует 0..4
+    // (фигура максимум занимает 4 строки), но если контракт будущей
+    // правкой сломается, без этого clamp обращение к LINE_SCORES[5]
+    // вернёт undefined и score стал бы NaN навсегда.
+    if (count > 4) {
+      count = 4;
+    }
+
     score += LINE_SCORES[count] * (level + 1);
     linesTotal += count;
 
@@ -411,19 +419,32 @@ function applyCleared(count) {
       // на скорость уровня — keyup ↓ её всё равно перепишет на правильную.
       startFallTimer(computeFallInterval(level));
     }
+
+    // drawScorePanel зовём только когда count > 0 — пустая фиксация
+    // (без удалённых линий) не меняет ни одного значения, лишние
+    // обращения к DOM не нужны. Стартовая отрисовка идёт отдельно
+    // в самом низу файла (см. блок «Запуск»).
+    drawScorePanel();
   }
-  drawScorePanel();
 }
 
 // === Отрисовка табло SCORE / LEVEL / LINES ===
-// Простое обновление текста в трёх HTML-элементах. Вызывается из
-// applyCleared (после изменения счёта) и один раз при старте — чтобы
-// синхронизировать панель с state-переменными, даже если HTML
-// показывает нули по умолчанию.
+// Кэш ссылок на три DOM-элемента табло, чтобы drawScorePanel не
+// дёргал getElementById при каждом вызове (а вызовов будет много —
+// при каждой результативной фиксации). Тег <script> подключён в
+// конце <body>, поэтому к моменту вычисления этих const элементы
+// уже существуют.
+const scoreEl = document.getElementById('score-value');
+const levelEl = document.getElementById('level-value');
+const linesEl = document.getElementById('lines-value');
+
+// Простое обновление текста в трёх HTML-элементах через закэшированные
+// ссылки. Вызывается из applyCleared (только когда счёт реально
+// изменился) и один раз при старте — для синхронизации с state.
 function drawScorePanel() {
-  document.getElementById('score-value').textContent = score;
-  document.getElementById('level-value').textContent = level;
-  document.getElementById('lines-value').textContent = linesTotal;
+  scoreEl.textContent = score;
+  levelEl.textContent = level;
+  linesEl.textContent = linesTotal;
 }
 
 // === Шаг падения по таймеру ===
