@@ -30,7 +30,9 @@
   --color-piece-J: #B45A2A;                /* J — рыжий-коричневый */
   --color-piece-L: #C77B3A;                /* L — светлая ржавчина (читается на тёмном фоне; прежний #5A3A22 сливался) */
 
-  --glow-radius-sm: 8px;                   /* радиус мягкого свечения вокруг фигуры */
+  --glow-radius-sm: 8px;                   /* радиус мягкого свечения вокруг фигуры и заголовка */
+  --glow-radius-lg: 20px;                  /* радиус большого свечения вокруг игрового поля */
+  --spacing-title-bottom: 30px;            /* отступ под заголовком до игрового поля (нестандартный, поэтому не --spacing-base) */
 }
 
 /* Сбрасываем поля браузера у body и центрируем содержимое.
@@ -53,7 +55,7 @@ h1 {
   font-size: var(--font-size-title);
   letter-spacing: var(--letter-spacing-title);
   text-shadow: 0 0 var(--glow-radius-sm) var(--color-green);
-  margin: var(--spacing-base) 0 30px 0;
+  margin: var(--spacing-base) 0 var(--spacing-title-bottom) 0;
 }
 
 /* Игровое поле — пустой контейнер.
@@ -65,7 +67,7 @@ h1 {
   display: grid;
   grid-template-columns: repeat(var(--cols), var(--cell-size));
   grid-template-rows: repeat(var(--rows), var(--cell-size));
-  box-shadow: 0 0 20px var(--color-green-glow);
+  box-shadow: 0 0 var(--glow-radius-lg) var(--color-green-glow);
 }
 
 /* Базовая клетка поля: размер из переменной, тонкая зелёная рамка,
