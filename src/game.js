@@ -252,10 +252,11 @@ function getNextPiece() {
 //   - filled        — структурный (position / z-index, см. style.css);
 //   - piece-<id>    — цвет фона и свечения, тоже из style.css.
 function drawBoard() {
-  const boardEl = document.getElementById('game-board');
-
+  // gameBoardEl — закэшированная глобальная ссылка из блока DOM-кэшей
+  // ниже по файлу. К моменту первого вызова drawBoard все const уже
+  // инициализированы (стартовый вызов идёт в самом конце файла).
   // Очищаем содержимое — иначе клетки добавлялись бы поверх старых.
-  boardEl.innerHTML = '';
+  gameBoardEl.innerHTML = '';
 
   for (let row = 0; row < ROWS; row++) {
     for (let col = 0; col < COLS; col++) {
@@ -283,7 +284,7 @@ function drawBoard() {
         cell.classList.add('piece-' + currentPieceId);
       }
 
-      boardEl.appendChild(cell);
+      gameBoardEl.appendChild(cell);
     }
   }
 }
@@ -593,6 +594,13 @@ function performLock() {
   lockDelayTimer = null;
 
   const cleared = freezePiece();
+
+  // Замечание про порядок: applyCleared при level-up может вызвать
+  // startFallTimer и поднять новый fall-таймер. Если сразу после
+  // этого мы триггерим Game Over (ниже), triggerGameOver его убьёт
+  // через clearInterval + fallTimer = null. Короткая «жизнь» нового
+  // таймера в одном вызов-стеке не приводит к утечке или лишним
+  // тикам: dropStep всё равно увидит isGameOver и сделает return.
   applyCleared(cleared);
   spawnNewPiece();
 
