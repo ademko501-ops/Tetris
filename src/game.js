@@ -1,13 +1,19 @@
 // =====================================================
-// Tetris Vault-Tec — game logic, stage R-10
-// Цель этапа: очки, уровень и табло справа от поля.
-// Очки начисляются по таблице Nintendo (1/2/3/4 линии =
-// 40/100/300/1200 базовых, умножается на (level + 1)).
-// Уровень растёт через каждые 10 удалённых линий и
-// ускоряет падение по линейной формуле
-//   max(MIN_FALL_INTERVAL_MS, BASE - level * STEP).
-// freezePiece из R-9 уже возвращает count удалённых
-// линий — здесь этот результат впервые читается.
+// Tetris Vault-Tec — game logic, stage R-11 (финал Модуля 5)
+// Цели этапа:
+//   1) Game Over: новая фигура спавнится в занятых клетках →
+//      экран Game Over (swap с #game-board), запись best score
+//      в localStorage, клавиша R для рестарта.
+//   2) Lock delay 500 мс (как в NES): фигура коснулась дна →
+//      пауза перед фиксацией; движения НЕ перезапускают таймер,
+//      сброс только если фигура снова смогла двинуться вниз.
+//   3) Best score: новая четвёртая строка табло, чтение из
+//      localStorage при старте, запись при Game Over если побит.
+//   4) Закрытие двух заделов:
+//      • hardDrop теперь явно перезапускает fall таймер после
+//        spawn (R-9);
+//      • soft drop корректно сохраняется при level-up через
+//        флаг isSoftDropping (R-10).
 // =====================================================
 
 // === Размеры поля ===
@@ -40,6 +46,24 @@ const LINE_SCORES = [0, 40, 100, 300, 1200];
 // LINES_PER_LEVEL — сколько линий надо удалить за всю партию, чтобы
 // уровень вырос на 1. Уровень = floor(linesTotal / LINES_PER_LEVEL).
 const LINES_PER_LEVEL = 10;
+
+// === Lock delay (R-11) ===
+// Когда фигура коснулась дна (canMove(1,0) === false), она НЕ
+// фиксируется мгновенно. Запускается таймер LOCK_DELAY_MS — за это
+// время игрок может ещё сдвинуть фигуру вбок над выемкой или
+// повернуть её. По истечении — performLock (freeze + spawn + ...).
+// NES-канон: сами движения НЕ перезапускают таймер; сброс только
+// если фигура после движения снова смогла двинуться вниз.
+// (В современных Тетрисах с SRS делают reset на каждое движение —
+// это «infinite stall», но пользователь явно попросил NES-вариант.)
+const LOCK_DELAY_MS = 500;
+
+// === localStorage best score (R-11) ===
+// Ключ под лучшим за всю историю счётом. Читается один раз при
+// загрузке (loadBestScore), пишется на Game Over если score побил
+// рекорд (saveBestScore). Обе операции обёрнуты в try/catch —
+// приватный режим браузера может выбросить SecurityError.
+const BEST_SCORE_KEY = 'tetris-vault-best-score';
 
 // === Каталог фигур (single source of truth) ===
 // Семь классических тетромино. Каждая запись:
@@ -167,14 +191,33 @@ let currentBag = [];
 // можно остановить таймер (clearInterval). null = «таймера нет».
 let fallTimer = null;
 
-// === Состояние счёта (R-10) ===
-// score      — суммарные очки за партию.
-// linesTotal — суммарное количество удалённых линий за партию.
-// level      — текущий уровень = floor(linesTotal / LINES_PER_LEVEL).
-//              Влияет на скорость падения и на множитель очков.
+// === Состояние lock delay (R-11) ===
+// lockDelayTimer — идентификатор setTimeout, который через LOCK_DELAY_MS
+// зафиксирует фигуру через performLock. null = таймер не запущен.
+// Управляется через armLockDelay / cancelLockDelay (см. ниже).
+let lockDelayTimer = null;
+
+// === Состояние счёта (R-10, расширено R-11) ===
+// score          — суммарные очки за партию.
+// linesTotal     — суммарное количество удалённых линий за партию.
+// level          — текущий уровень = floor(linesTotal / LINES_PER_LEVEL).
+//                  Влияет на скорость падения и на множитель очков.
+// bestScore      — лучший счёт за всю историю (читается из localStorage
+//                  при старте, обновляется на Game Over если побит).
+// isSoftDropping — флаг «↓ сейчас удерживается игроком». Нужен
+//                  applyCleared, чтобы при level-up сохранить soft drop
+//                  (FAST), а не сбросить его на скорость уровня.
+//                  Закрывает задел R-10.
+// isGameOver     — глобальный флаг «партия закончена». Все игровые
+//                  действия (dropStep / tryMove / tryRotate / hardDrop)
+//                  делают `if (isGameOver) return;`. Снимает только
+//                  resetGame по клавише R.
 let score = 0;
 let linesTotal = 0;
 let level = 0;
+let bestScore = 0;
+let isSoftDropping = false;
+let isGameOver = false;
 
 // === Создание нового перетасованного мешка ===
 // Возвращает копию массива SHAPES в случайном порядке.
@@ -414,10 +457,11 @@ function applyCleared(count) {
     const newLevel = Math.floor(linesTotal / LINES_PER_LEVEL);
     if (newLevel !== level) {
       level = newLevel;
-      // Уровень вырос → таймер ускоряется. Если в момент level-up игрок
-      // удерживал ↓ (soft drop), его скорость на короткое время заменится
-      // на скорость уровня — keyup ↓ её всё равно перепишет на правильную.
-      startFallTimer(computeFallInterval(level));
+      // R-11 фикс задела R-10: если игрок сейчас удерживает ↓,
+      // soft drop должен продолжаться на новой (более быстрой) скорости
+      // уровня, а не сбрасываться обратно на BASE. Поэтому при level-up
+      // сохраняем семантику текущей фазы через флаг isSoftDropping.
+      startFallTimer(isSoftDropping ? FAST_FALL_INTERVAL_MS : computeFallInterval(level));
     }
 
     // drawScorePanel зовём только когда count > 0 — пустая фиксация
@@ -428,59 +472,233 @@ function applyCleared(count) {
   }
 }
 
-// === Отрисовка табло SCORE / LEVEL / LINES ===
-// Кэш ссылок на три DOM-элемента табло, чтобы drawScorePanel не
-// дёргал getElementById при каждом вызове (а вызовов будет много —
-// при каждой результативной фиксации). Тег <script> подключён в
-// конце <body>, поэтому к моменту вычисления этих const элементы
-// уже существуют.
+// === DOM-ссылки (R-10 + R-11) ===
+// Кэш ссылок на элементы интерфейса, чтобы не дёргать getElementById
+// при каждом обновлении. Тег <script> подключён в конце <body>,
+// поэтому к моменту вычисления этих const все элементы существуют.
+// scoreEl / levelEl / linesEl / bestEl — четыре строки табло;
+// gameBoardEl / gameOverScreenEl — переключаются swap'ом через
+// атрибут hidden при Game Over и при рестарте (R);
+// gameOverScoreEl — куда пишется итоговый счёт на экране Game Over.
 const scoreEl = document.getElementById('score-value');
 const levelEl = document.getElementById('level-value');
 const linesEl = document.getElementById('lines-value');
+const bestEl = document.getElementById('best-value');
+const gameBoardEl = document.getElementById('game-board');
+const gameOverScreenEl = document.getElementById('game-over-screen');
+const gameOverScoreEl = document.getElementById('game-over-score-value');
 
-// Простое обновление текста в трёх HTML-элементах через закэшированные
+// === Best score в localStorage (R-11) ===
+// loadBestScore возвращает сохранённый рекорд или 0 при любых ошибках
+// (нет ключа, нечисловое значение, отрицательное число, localStorage
+// недоступен из-за приватного режима). Гладкая деградация: если
+// SecurityError — мы просто играем без рекорда, скрипт не падает.
+function loadBestScore() {
+  try {
+    const raw = localStorage.getItem(BEST_SCORE_KEY);
+    const parsed = parseInt(raw, 10);
+    if (isNaN(parsed) || parsed < 0) {
+      return 0;
+    }
+    return parsed;
+  } catch (e) {
+    return 0;
+  }
+}
+
+// saveBestScore пишет рекорд в localStorage. Если приватный режим
+// выбрасывает SecurityError — тихо игнорируем: рекорд продолжит
+// работать в памяти текущей сессии, в localStorage просто не запишется.
+function saveBestScore(value) {
+  try {
+    localStorage.setItem(BEST_SCORE_KEY, String(value));
+  } catch (e) {
+    // намеренно пусто — никаких console.warn, чтобы не пугать
+    // пользователя сообщениями в консоли в приватном режиме.
+  }
+}
+
+// Простое обновление текста в четырёх HTML-элементах через закэшированные
 // ссылки. Вызывается из applyCleared (только когда счёт реально
-// изменился) и один раз при старте — для синхронизации с state.
+// изменился), из triggerGameOver (если bestScore обновился), из
+// resetGame (после сброса), и один раз при старте.
 function drawScorePanel() {
   scoreEl.textContent = score;
   levelEl.textContent = level;
   linesEl.textContent = linesTotal;
+  bestEl.textContent = bestScore;
 }
 
 // === Шаг падения по таймеру ===
 // Раз в computeFallInterval(level) мс (или FAST_FALL_INTERVAL_MS,
-// если зажата ↓) эту функцию вызывает setInterval. Логика:
-//   - если фигура может опуститься на одну строку — опускаем;
-//   - если не может (упёрлась в стек или дно) — впечатываем её в
-//     stack (с попутным удалением заполненных линий), начисляем
-//     очки через applyCleared и спавним следующую.
+// если зажата ↓) эту функцию вызывает setInterval. Логика R-11:
+//   - если isGameOver — return сразу (защита, на случай если таймер
+//     не успели остановить до того, как тик прилетел);
+//   - если фигура может опуститься на одну строку — опускаем
+//     и отменяем lock delay (фигура снова в воздухе);
+//   - если не может — запускаем lock delay (если ещё не активен).
+//     freeze + spawn выполнится через LOCK_DELAY_MS мс из performLock.
 // Таймер при этом НЕ останавливается: новая фигура подхватывает темп.
 function dropStep() {
+  if (isGameOver) {
+    return;
+  }
+
   if (canMove(currentShape, 1, 0)) {
     pieceRow++;
+    // Фигура снова двинулась → если был активен lock delay
+    // (например, висела на крае выемки и теперь съехала внутрь),
+    // отменяем его. NES-канон: только переход к «can-move-down»
+    // сбрасывает таймер, не само движение.
+    cancelLockDelay();
+    drawBoard();
   } else {
-    const cleared = freezePiece();
-    applyCleared(cleared);
-    spawnNewPiece();
+    // Не можем вниз — запускаем lock delay (если ещё не запущен).
+    // performLock через LOCK_DELAY_MS мс впечатает фигуру и сам
+    // вызовет drawBoard. До тех пор поле не перерисовываем — фигура
+    // остаётся на месте, нечего обновлять.
+    armLockDelay();
+  }
+}
+
+// === Lock delay (R-11) ===
+// armLockDelay     — запускает таймер на LOCK_DELAY_MS, если ещё не активен.
+// cancelLockDelay  — отменяет активный таймер; вызывается когда фигура
+//                    снова может вниз (dropStep, после успешного move/rotate),
+//                    при hard drop (мгновенный freeze) и при Game Over.
+// performLock      — то, что делает таймер по истечении: впечатать,
+//                    начислить очки, спавнить следующую, проверить
+//                    Game Over. Аналог «freeze»-ветки старого dropStep,
+//                    только запускается отдельным setTimeout-таймером.
+
+function armLockDelay() {
+  if (lockDelayTimer !== null) {
+    // NES-канон: таймер уже тикает — не перезапускаем.
+    // Иначе движения внутри окна lock delay растягивали бы паузу
+    // («infinite stall» из современного SRS — не наш вариант).
+    return;
+  }
+  lockDelayTimer = setTimeout(performLock, LOCK_DELAY_MS);
+}
+
+function cancelLockDelay() {
+  if (lockDelayTimer !== null) {
+    clearTimeout(lockDelayTimer);
+    lockDelayTimer = null;
+  }
+}
+
+function performLock() {
+  // Таймер только что отстрелял — обнуляем идентификатор.
+  lockDelayTimer = null;
+
+  const cleared = freezePiece();
+  applyCleared(cleared);
+  spawnNewPiece();
+
+  // Game Over: новая фигура спавнится в занятых клетках стека.
+  // canMove(currentShape, 0, 0) === false означает collision на спавне.
+  if (!canMove(currentShape, 0, 0)) {
+    triggerGameOver();
+    return;
   }
   drawBoard();
 }
 
+// === Game Over (R-11) ===
+// triggerGameOver — останавливает таймеры, обновляет рекорд, переключает
+//                   #game-board на #game-over-screen через атрибут hidden.
+// resetGame      — полный сброс state партии и старт новой игры.
+//                   Вызывается из keydown по клавише R при isGameOver.
+
+function triggerGameOver() {
+  isGameOver = true;
+
+  // Останавливаем все таймеры — игровая логика дальше не тикает.
+  if (fallTimer !== null) {
+    clearInterval(fallTimer);
+    fallTimer = null;
+  }
+  cancelLockDelay();
+
+  // Обновляем рекорд, если побит.
+  if (score > bestScore) {
+    bestScore = score;
+    saveBestScore(bestScore);
+  }
+  drawScorePanel();
+
+  // Показываем экран Game Over вместо поля.
+  gameOverScoreEl.textContent = score;
+  gameBoardEl.hidden = true;
+  gameOverScreenEl.hidden = false;
+}
+
+function resetGame() {
+  // 0) На всякий случай отменяем lock delay: при вызове из Game Over
+  //    он уже отменён (triggerGameOver), но если когда-нибудь
+  //    resetGame будет вызываться напрямую — гарантия без утечки.
+  cancelLockDelay();
+
+  // 1) Сбрасываем state партии.
+  isGameOver = false;
+  score = 0;
+  linesTotal = 0;
+  level = 0;
+  isSoftDropping = false;
+
+  // 2) Очищаем стек (переписываем все строки новыми массивами null).
+  //    Stack объявлен через const, длину не меняем — переприсваиваем элементы.
+  for (let r = 0; r < ROWS; r++) {
+    stack[r] = Array(COLS).fill(null);
+  }
+
+  // 3) Пересоздаём 7-bag, чтобы новая партия не доедала остатки старого мешка.
+  currentBag = [];
+
+  // 4) Ставим первую фигуру.
+  spawnNewPiece();
+
+  // 5) Переключаем экраны: показываем поле, прячем Game Over.
+  gameBoardEl.hidden = false;
+  gameOverScreenEl.hidden = true;
+
+  // 6) Синхронизируем UI и стартуем таймер на скорости уровня 0.
+  drawBoard();
+  drawScorePanel();
+  startFallTimer(computeFallInterval(level));
+}
+
 // === Мгновенный сброс (hard drop) ===
-// Опускает текущую фигуру максимально вниз — пока canMove разрешает
-// шаг на одну строку. После — фиксирует её в стек (freezePiece вызовет
-// и clearLines) и сразу спавнит следующую.
-// Никаких промежуточных кадров и таймеров: всё происходит в одном тике.
-// Если фигура уже стоит на дне (canMove сразу false) — цикл не делает
-// ни одного шага, freezePiece+spawnNewPiece+drawBoard всё равно отработают.
+// Опускает фигуру максимально вниз и фиксирует её в одном тике,
+// без таймеров и промежуточных кадров.
+// R-11:
+//   • в начале guard isGameOver (на случай если R ещё не нажата);
+//   • cancelLockDelay — если фигура висела на дне и lock delay
+//     уже тикал, его надо отменить, иначе через 500 мс он повторно
+//     зафиксировал бы уже несуществующую (новую!) фигуру;
+//   • после spawn проверяем Game Over (collision на стартовой позиции);
+//   • в конце перезапускаем fall таймер от нуля — закрывает задел R-9:
+//     иначе остаток старого интервала «съел» бы 0..1000 мс новой фигуры.
+//     При активном soft drop сохраняем FAST.
 function hardDrop() {
+  if (isGameOver) {
+    return;
+  }
+  cancelLockDelay();
+
   while (canMove(currentShape, 1, 0)) {
     pieceRow++;
   }
   const cleared = freezePiece();
   applyCleared(cleared);
   spawnNewPiece();
+  if (!canMove(currentShape, 0, 0)) {
+    triggerGameOver();
+    return;
+  }
   drawBoard();
+  startFallTimer(isSoftDropping ? FAST_FALL_INTERVAL_MS : computeFallInterval(level));
 }
 
 // === Запуск / переключение таймера падения ===
@@ -499,10 +717,19 @@ function startFallTimer(intervalMs) {
 // deltaCol = -1 → влево, deltaCol = +1 → вправо.
 // Проверка делается через canMove — она учитывает и границы поля,
 // и стек. Если сдвиг невозможен — ничего не происходит.
+// R-11: после успешного сдвига проверяем, не съехала ли фигура
+// над выемкой — если canMove(1,0) снова true, отменяем lock delay.
+// Сам сдвиг таймер НЕ перезапускает (NES-канон).
 function tryMoveHorizontal(deltaCol) {
+  if (isGameOver) {
+    return;
+  }
   if (canMove(currentShape, 0, deltaCol)) {
     pieceCol += deltaCol;
     drawBoard();
+    if (canMove(currentShape, 1, 0)) {
+      cancelLockDelay();
+    }
   }
 }
 
@@ -593,6 +820,9 @@ const SRS_KICKS = {
 //   5) Если ни один сдвиг не подошёл — фигура остаётся как была,
 //      побочных эффектов нет.
 function tryRotate() {
+  if (isGameOver) {
+    return;
+  }
   if (currentPieceId === 'O') {
     return;
   }
@@ -610,6 +840,12 @@ function tryRotate() {
       pieceCol += dCol;
       pieceRow += dRow;
       drawBoard();
+      // R-11: после успешного поворота проверяем — не открылась ли
+      // под фигурой клетка для движения вниз. Если да, lock delay
+      // сбрасывается. Сам поворот таймер не перезапускает (NES-канон).
+      if (canMove(currentShape, 1, 0)) {
+        cancelLockDelay();
+      }
       return;
     }
   }
@@ -633,17 +869,29 @@ const CONTROLLED_KEYS = ['ArrowLeft', 'ArrowRight', 'ArrowDown', 'ArrowUp', 'Spa
 
 // Слушаем нажатия клавиш на всём документе. event.code —
 // физическое имя клавиши: 'ArrowLeft' / 'ArrowRight' для ←/→,
-// 'ArrowDown' для ускоренного падения, 'ArrowUp' для поворота
-// по часовой, 'Space' для мгновенного сброса (R-9).
+// 'ArrowDown' для soft drop, 'ArrowUp' для поворота по часовой,
+// 'Space' для hard drop, 'KeyR' для рестарта (только при Game Over).
 document.addEventListener('keydown', (event) => {
   // Поведение браузера по умолчанию: стрелки ↓/↑ листают страницу,
   // пробел тоже скроллит (примерно на пол-экрана), ←/→ могут
   // прокручивать горизонтально внутри прокручиваемых блоков.
   // Для тех клавиш, которыми играем сами, отключаем дефолт сразу —
-  // иначе во время игры страница уезжает под фигурой.
-  // Прочие клавиши (Tab, F5, Ctrl+R и т. д.) — пропускаем как есть.
+  // даже на Game Over экране пользователь мог бы случайно начать
+  // скроллить страницу. Прочие клавиши (Tab, F5, Ctrl+R, KeyR и т. д.) —
+  // пропускаем как есть. R специально НЕ в CONTROLLED_KEYS: она
+  // не вызывает дефолтных действий браузера, preventDefault не нужен.
   if (CONTROLLED_KEYS.includes(event.code)) {
     event.preventDefault();
+  }
+
+  // R-11: при Game Over реагируем ТОЛЬКО на R (рестарт). Прочие
+  // игровые клавиши игнорируются. event.repeat у R тоже отсекаем —
+  // случайный зажим R не должен дёргать resetGame подряд.
+  if (isGameOver) {
+    if (event.code === 'KeyR' && !event.repeat) {
+      resetGame();
+    }
+    return;
   }
 
   if (event.code === 'ArrowLeft') {
@@ -660,12 +908,13 @@ document.addEventListener('keydown', (event) => {
     tryRotate();
   } else if (event.code === 'ArrowDown') {
     // event.repeat === true — ОС-автоповтор при удержании клавиши.
-    // Переключение на ускоренный режим делается один раз, при
-    // первом нажатии. Дальнейшие "повторы" игнорируем, иначе будем
-    // зря дёргать clearInterval/setInterval каждые 30-50 мс.
+    // Переключение на ускоренный режим делается один раз, при первом
+    // нажатии. Дальнейшие «повторы» игнорируем.
     if (event.repeat) {
       return;
     }
+    // R-11: флаг для applyCleared, чтобы при level-up сохранить FAST.
+    isSoftDropping = true;
     startFallTimer(FAST_FALL_INTERVAL_MS);
   } else if (event.code === 'Space') {
     // Тоже отсекаем ОС-автоповтор: один зажим пробела не должен
@@ -682,34 +931,37 @@ document.addEventListener('keydown', (event) => {
 // «Обычная» теперь зависит от уровня — берём из computeFallInterval(level).
 // Если ↓ всё ещё держится, когда новая фигура спавнится — она
 // продолжит падать ускоренно. Это поведение из канона Тетриса.
+// R-11: всегда сбрасываем флаг isSoftDropping. Таймер перезапускаем
+// ТОЛЬКО если не в состоянии Game Over (иначе мы бы оживляли игру).
 document.addEventListener('keyup', (event) => {
   if (event.code === 'ArrowDown') {
-    startFallTimer(computeFallInterval(level));
+    isSoftDropping = false;
+    if (!isGameOver) {
+      startFallTimer(computeFallInterval(level));
+    }
   }
 });
 
 // === Запуск ===
 // Тег <script> подключён в конце <body>, поэтому к моменту
-// выполнения этой строки HTML уже распарсен — контейнеры
-// #game-board и #score-panel точно существуют на странице.
-// Сначала ставим первую фигуру в стартовую позицию (тот же
-// spawnNewPiece, что вызывается при фиксации) — формула живёт
-// в одном месте, мешок 7-bag создаётся при первом обращении.
+// выполнения этой строки HTML уже распарсен — все DOM-элементы
+// (#game-board, #score-panel, #game-over-screen) точно существуют.
+// R-11: первым делом подгружаем рекорд из localStorage — он должен
+// быть готов до первой отрисовки табло.
+bestScore = loadBestScore();
+
+// Ставим первую фигуру и рисуем поле + табло.
 spawnNewPiece();
 drawBoard();
-
-// Стартовая синхронизация табло с state-переменными (0 / 0 / 0).
-// HTML уже показывает нули, но если вдруг state поменялся до старта
-// (например, при hot-reload в будущем), это всё равно даст консистентность.
 drawScorePanel();
 
 // Стартуем таймер на скорости уровня 0 (= BASE_FALL_INTERVAL_MS).
 // Дальше скорость переключается через тот же startFallTimer:
 // soft drop ↓ → FAST, отпускание ↓ → computeFallInterval(level),
-// level-up в applyCleared → computeFallInterval(level).
+// level-up в applyCleared → FAST (если isSoftDropping) или скорость уровня,
+// hard drop → restart на текущей скорости, Game Over → останов.
 startFallTimer(computeFallInterval(level));
 
-// Маяк в консоли DevTools (F12 → Console) — подтверждает,
-// что скрипт запустился, мешок фигур загружен, таймер падения
-// активирован, стек живой, табло синхронизировано, клавиатура слушается.
-console.log("Vault-Tec terminal online. Seven-piece bag loaded. Stack initialised. Score panel armed. Keyboard armed (←/→/↑/↓/Space).");
+// Маяк в консоли DevTools (F12 → Console) — подтверждает, что
+// все системы инициализированы и слушают ввод.
+console.log("Vault-Tec terminal online. Seven-piece bag loaded. Stack initialised. Score panel armed. Lock delay armed. Best score loaded. Keyboard armed (←/→/↑/↓/Space, R to restart on Game Over).");

@@ -34,15 +34,31 @@
   --glow-radius-lg: 20px;                  /* радиус большого свечения вокруг игрового поля */
   --spacing-title-bottom: 30px;            /* отступ под заголовком до игрового поля (нестандартный, поэтому не --spacing-base) */
 
-  /* === Параметры табло (R-10) === */
+  /* === Параметры табло (R-10, расширено R-11: добавилась строка BEST) === */
   /* Используются классами .panel-* ниже; здесь, чтобы все размеры
      панели жили в одном месте и легко правились. */
-  --panel-min-width: 140px;                /* минимальная ширина табло — чтобы числа не «прыгали» при росте */
+  --panel-min-width: 170px;                /* минимальная ширина табло (R-11: было 140px при 3 строках; с BEST и запасом под 6-7 цифр счёта — 170px) */
   --panel-gap-h: 30px;                     /* промежуток между игровым полем и панелью */
-  --panel-gap-v: 20px;                     /* промежуток между строками панели (SCORE / LEVEL / LINES) */
-  --font-size-panel-label: 14px;           /* размер подписи SCORE / LEVEL / LINES */
+  --panel-gap-v: 20px;                     /* промежуток между строками панели (SCORE / LEVEL / LINES / BEST) */
+  --font-size-panel-label: 14px;           /* размер подписи SCORE / LEVEL / LINES / BEST */
   --font-size-panel-value: 28px;           /* размер самой цифры */
   --letter-spacing-panel-label: 2px;       /* разрядка букв подписи (в духе CRT-меток) */
+
+  /* === Параметры экрана Game Over (R-11) === */
+  /* Все шрифты экрана Game Over — отдельными переменными, чтобы при
+     стилизации (R-12) их можно было крутить независимо от табло. */
+  --font-size-gameover-title: 36px;        /* «GAME OVER» — крупно, в центре поля */
+  --font-size-gameover-score: 32px;        /* итоговый SCORE — близко к panel-value, но чуть крупнее */
+  --font-size-gameover-hint: 14px;         /* «PRESS R TO RESTART» — мелкая CRT-инструкция */
+}
+
+/* Глобальное правило для атрибута hidden (R-11).
+   У некоторых наших элементов (#game-over-screen) в CSS прописан
+   display: flex, и это перебивает встроенный display:none браузера
+   у элементов с атрибутом hidden. Чтобы hidden работал надёжно для
+   всех будущих элементов — явно даём ему максимальный приоритет. */
+[hidden] {
+  display: none !important;
 }
 
 /* Сбрасываем поля браузера у body и центрируем содержимое.
@@ -180,4 +196,61 @@ h1 {
   font-size: var(--font-size-panel-value);
   color: var(--color-amber);
   text-shadow: 0 0 var(--glow-radius-sm) var(--color-amber);
+}
+
+/* === Экран Game Over (R-11) === */
+/* По умолчанию атрибут hidden в HTML прячет элемент. JS снимает hidden
+   при triggerGameOver и ставит обратно при resetGame.
+   Размеры заданы такими же, как у #game-board (cols × rows × cell-size) —
+   чтобы при переключении layout #game-wrapper не «прыгал». */
+#game-over-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-base);
+  width: calc(var(--cell-size) * var(--cols));
+  height: calc(var(--cell-size) * var(--rows));
+  padding: var(--spacing-base);
+  background-color: var(--color-bg);
+  border: 1px solid var(--color-green);
+  box-shadow: 0 0 var(--glow-radius-lg) var(--color-green-glow);
+  box-sizing: border-box;
+}
+
+/* Заголовок «GAME OVER» — крупно, в духе CRT, с разрядкой
+   как у главного заголовка страницы. */
+.game-over-title {
+  font-size: var(--font-size-gameover-title);
+  letter-spacing: var(--letter-spacing-title);
+  color: var(--color-green);
+  text-shadow: 0 0 var(--glow-radius-sm) var(--color-green);
+}
+
+/* Блок «SCORE: 12340» — подпись + значение в столбик, по центру. */
+.game-over-score-row {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.game-over-score-label {
+  font-size: var(--font-size-panel-label);
+  letter-spacing: var(--letter-spacing-panel-label);
+  color: var(--color-green);
+  text-shadow: 0 0 var(--glow-radius-sm) var(--color-green);
+}
+.game-over-score-value {
+  font-size: var(--font-size-gameover-score);
+  color: var(--color-amber);
+  text-shadow: 0 0 var(--glow-radius-sm) var(--color-amber);
+}
+
+/* Подсказка «PRESS R TO RESTART» — мелким зелёным, чтобы не отвлекала
+   от итогового SCORE сверху. */
+.game-over-hint {
+  font-size: var(--font-size-gameover-hint);
+  letter-spacing: var(--letter-spacing-panel-label);
+  color: var(--color-green);
+  text-shadow: 0 0 var(--glow-radius-sm) var(--color-green);
 }

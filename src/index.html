@@ -17,8 +17,23 @@
          Клетки внутрь добавляет JavaScript (см. game.js → drawBoard). -->
     <div id="game-board"></div>
 
-    <!-- Табло SCORE / LEVEL / LINES (R-10).
+    <!-- Экран Game Over (R-11). При старте скрыт через атрибут hidden;
+         JS показывает его при триггере (triggerGameOver) и снова прячет
+         при рестарте (resetGame, клавиша R). Размеры в CSS заданы такими
+         же, как у поля, — чтобы layout не прыгал при swap. -->
+    <div id="game-over-screen" hidden>
+      <div class="game-over-title">GAME OVER</div>
+      <div class="game-over-score-row">
+        <div class="game-over-score-label">SCORE</div>
+        <div class="game-over-score-value" id="game-over-score-value">0</div>
+      </div>
+      <div class="game-over-hint">PRESS R TO RESTART</div>
+    </div>
+
+    <!-- Табло SCORE / LEVEL / LINES / BEST (R-10 + BEST в R-11).
          Значения обновляет drawScorePanel() из game.js.
+         BEST читается из localStorage при старте и обновляется на
+         Game Over, если текущий счёт побил рекорд.
          Стартовые "0" в HTML — чтобы при загрузке страницы
          (до выполнения JS) пользователь не видел пустые места. -->
     <aside id="score-panel">
@@ -33,6 +48,10 @@
       <div class="panel-row">
         <div class="panel-label">LINES</div>
         <div class="panel-value" id="lines-value">0</div>
+      </div>
+      <div class="panel-row">
+        <div class="panel-label">BEST</div>
+        <div class="panel-value" id="best-value">0</div>
       </div>
     </aside>
 
