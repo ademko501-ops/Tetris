@@ -406,7 +406,10 @@ function clearLines() {
 // сверху по центру. Формула центрирования живёт ровно здесь —
 // единственное место, где она нужна.
 // Game Over (новая фигура появляется прямо в занятых клетках стека)
-// пока не обрабатываем — это будет в R-11.
+// проверяют caller'ы — performLock и hardDrop после вызова
+// spawnNewPiece, через `if (!canMove(currentShape, 0, 0))`.
+// Сама spawnNewPiece остаётся «низкоуровневым setter-ом» и про
+// Game Over ничего не знает.
 function spawnNewPiece() {
   const next = getNextPiece();
   currentShape = next.shape;
@@ -437,11 +440,13 @@ function computeFallInterval(currentLevel) {
 //      перезапускает таймер на новой (более быстрой) скорости.
 // В конце обновляет HTML-табло.
 //
-// Вызывается из dropStep и hardDrop сразу после freezePiece().
-// При count === 0 (фигура села, но линии не очистились) функция всё
-// равно зовётся: drawScorePanel перерисует панель (на случай, если
-// уровень изменился из-за предыдущих линий — на самом деле такого не
-// будет, но защита от рассинхрона).
+// Вызывается из performLock (по таймеру lock delay) и hardDrop
+// (мгновенный сброс) сразу после freezePiece(). dropStep сам её НЕ
+// зовёт — после R-11 он только запускает lock delay, а фиксация
+// делегирована в performLock.
+// При count === 0 (фигура села, но линии не очистились) функция
+// делает только ранний return — drawScorePanel не зовётся, чтобы не
+// дёргать DOM зря (см. R-10 fix замечания #1).
 function applyCleared(count) {
   if (count > 0) {
     // Защита от потенциального count > 4: clearLines гарантирует 0..4

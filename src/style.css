@@ -51,6 +51,7 @@
   --font-size-gameover-score: 32px;        /* итоговый SCORE — близко к panel-value, но чуть крупнее */
   --font-size-gameover-hint: 14px;         /* «PRESS R TO RESTART» — мелкая CRT-инструкция */
   --game-over-score-gap: 4px;              /* «нулевое дыхание» между label «SCORE» и значением на экране Game Over */
+  --letter-spacing-gameover-hint: 2px;     /* разрядка букв подсказки «PRESS R TO RESTART» — собственная, чтобы изменения табло не задевали подсказку */
 }
 
 /* Глобальное правило для атрибута hidden (R-11).
@@ -251,7 +252,7 @@ h1 {
    от итогового SCORE сверху. */
 .game-over-hint {
   font-size: var(--font-size-gameover-hint);
-  letter-spacing: var(--letter-spacing-panel-label);
+  letter-spacing: var(--letter-spacing-gameover-hint);
   color: var(--color-green);
   text-shadow: 0 0 var(--glow-radius-sm) var(--color-green);
 }
