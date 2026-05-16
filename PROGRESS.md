@@ -413,3 +413,103 @@
 - Хеш fix-коммита по аудиту (защитная копия в clearLines, низкий #2): 1d47aa3
 - Следующий шаг: R-10 — счёт очков и счётчик удалённых линий (за каждую очищенную строку, бонус за «Tetris» = 4 строки разом).
 
+## Модуль 3 · Этап R-10 — Очки, уровень, табло (раздел добавлен «догоном» 16.05.2026)
+- Дата работы по этапу: 15.05.2026
+- Примечание: в момент закрытия R-10 раздел PROGRESS пропустили
+  по нашей ошибке (закоммитили только Stage_R-10.pdf, доки откладывали
+  «подтверди — продолжаю?» — подтверждения не дождались, ушли в R-11).
+  Догоняем сейчас, перед закрытием R-11, чтобы хронология
+  PROGRESS была непрерывной.
+- Сделано:
+  - **HTML** (`src/index.html`): поле `#game-board` обёрнуто в
+    `<div id="game-wrapper">` (flex row). Рядом с полем — новый
+    `<aside id="score-panel">` с тремя `.panel-row`: SCORE, LEVEL, LINES.
+    Каждая строка содержит `.panel-label` (метка) и `.panel-value`
+    (число с уникальным id: `score-value` / `level-value` / `lines-value`).
+    В HTML значения стартуют как «0» — заглушка, пока JS не отрисует.
+  - **CSS** (`src/style.css`): шесть новых переменных в `:root` для
+    параметров табло — `--panel-min-width: 140px`, `--panel-gap-h: 30px`
+    (между полем и панелью), `--panel-gap-v: 20px` (между строками),
+    `--font-size-panel-label: 14px`, `--font-size-panel-value: 28px`,
+    `--letter-spacing-panel-label: 2px`. Комментарий у `--color-amber`
+    обновлён: задел стал применением (цифры табло — янтарные, по
+    рекомендации vault-reviewer ещё с R-5). Новые правила:
+    `#game-wrapper` (flex + gap), `#score-panel` (тёмный фон, зелёная
+    рамка, свечение `--glow-radius-lg`, padding `--spacing-base`),
+    `.panel-row` (column), `.panel-label` (зелёная, мелкая, в разрядку),
+    `.panel-value` (янтарная, крупная, со свечением).
+  - **JS** (`src/game.js`):
+    - **Переименование констант скорости:** `FALL_INTERVAL_MS` →
+      `BASE_FALL_INTERVAL_MS` (1000 мс — обычная скорость на уровне 0).
+      Добавлены `LEVEL_SPEED_STEP_MS = 80`, `MIN_FALL_INTERVAL_MS = 100`.
+      `FAST_FALL_INTERVAL_MS = 100` (soft drop) НЕ менялся.
+    - **Новые константы:** `LINE_SCORES = [0, 40, 100, 300, 1200]`
+      (таблица Nintendo NES), `LINES_PER_LEVEL = 10`.
+    - **Новые state-переменные:** `let score = 0`, `let linesTotal = 0`,
+      `let level = 0` рядом с другими state.
+    - **Новая `computeFallInterval(currentLevel)`:** линейная кривая
+      `max(MIN_FALL_INTERVAL_MS, BASE_FALL_INTERVAL_MS - currentLevel * LEVEL_SPEED_STEP_MS)`.
+      На уровне 0 → 1000 мс, на уровне 12 → 100 мс (cap), дальше всё
+      на минимуме.
+    - **Новая `applyCleared(count)`:** при `count > 0` начисляет
+      `score += LINE_SCORES[count] * (level + 1)`, инкрементирует
+      `linesTotal`, пересчитывает `level = Math.floor(linesTotal / LINES_PER_LEVEL)`,
+      при level-up зовёт `startFallTimer(computeFallInterval(level))`.
+      В конце — `drawScorePanel()`.
+    - **Новая `drawScorePanel()`:** обновляет `.textContent` трёх
+      DOM-элементов табло.
+    - **DOM-cache:** ссылки `scoreEl` / `levelEl` / `linesEl` через
+      `document.getElementById` объявлены один раз при загрузке
+      файла — `drawScorePanel` обращается к закэшированным, а не
+      ищет в DOM при каждом вызове.
+    - **`dropStep`, `hardDrop`:** `freezePiece()` → `const cleared = freezePiece(); applyCleared(cleared);` —
+      впервые читается возвращаемое значение `freezePiece` из R-9.
+    - **`keyup` ↓:** `startFallTimer(FALL_INTERVAL_MS)` →
+      `startFallTimer(computeFallInterval(level))` — «обычная»
+      теперь зависит от уровня.
+    - **Startup:** добавлен `drawScorePanel()` для синхронизации
+      первого кадра табло. `startFallTimer(...)` теперь принимает
+      `computeFallInterval(level)`. Console-маяк дополнен
+      «Score panel armed».
+- Аудит этапа: vault-reviewer — 6 замечаний (3 средних + 3 низких).
+  Высоких не было.
+  Закрыты fix-коммитом `20d53fd`:
+    - **средний #1** (`applyCleared` зовёт `drawScorePanel()` при
+      `count === 0` — лишние DOM-обращения каждую фиксацию без линий)
+      — `drawScorePanel()` перенесён внутрь блока `if (count > 0)`.
+    - **средний #2** (`drawScorePanel` ищет 3 элемента через
+      `getElementById` при каждом вызове) — введены модульные const
+      `scoreEl` / `levelEl` / `linesEl`, кэширование один раз при загрузке.
+    - **средний #3** (нет защиты от `count > 4` — если контракт
+      `clearLines` сломают, `LINE_SCORES[5] === undefined → score = NaN`
+      навсегда) — добавлен clamp `if (count > 4) count = 4;`.
+    - **низкий #6** (`.panel-row` без `align-items` — при добавлении
+      иконки растянулась бы) — `align-items: flex-start` с однострочным
+      комментарием.
+  Не правились:
+    - **низкий #4** (`--panel-min-width: 140px` может оказаться мало
+      при счёте 7+ цифр) — reviewer сам пишет «оставить, проверить при R-11».
+    - **низкий #5** (регрессия soft drop при level-up — таймер
+      перебивает FAST на скорость уровня) — отложено reviewer'ом
+      «до R-11 при общем рефакторинге состояния».
+  Бонус-наблюдение reviewer'а (не замечание): `FAST_FALL_INTERVAL_MS == MIN_FALL_INTERVAL_MS == 100`
+  → на уровне 12+ soft drop перестаёт давать ускорение. Не баг,
+  известное ограничение.
+- Заделы на R-11 (закрыты в R-11):
+  - **`--panel-min-width`** — пересмотрен с 140px на 170px (4 строки + запас).
+  - **Soft drop при level-up** — закрыт через флаг `isSoftDropping`,
+    `applyCleared` теперь выбирает `FAST` или скорость уровня
+    в зависимости от его значения.
+  - **`FAST == MIN`** — известное ограничение, не закрывается в R-11
+    (это сознательное архитектурное решение).
+- Результат: при открытии `index.html` — справа от поля появляется
+  зелёная панель с тремя метками (SCORE / LEVEL / LINES) и янтарными
+  значениями. Очистка линии увеличивает SCORE по таблице Nintendo
+  (40 / 100 / 300 / 1200 × (level+1)). После 10 линий — LEVEL = 1,
+  падение ускоряется. Hard drop / soft drop / повороты — без регрессий.
+  В консоли: `Vault-Tec terminal online. Seven-piece bag loaded. Stack initialised. Score panel armed. Keyboard armed (←/→/↑/↓/Space).`
+- Хеш коммита кода R-10: 125083c
+- Хеш fix-коммита по аудиту (3 средних + низкий #6): 20d53fd
+- Хеш коммита Stage_R-10.pdf: 971e0fb
+- Следующий шаг: R-11 — Game Over с экраном, перезапуск по клавише R, lock delay 500мс перед фиксацией (как в NES), best score через localStorage. Финал Модуля 5.
+
