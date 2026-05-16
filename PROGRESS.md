@@ -513,3 +513,162 @@
 - Хеш коммита Stage_R-10.pdf: 971e0fb
 - Следующий шаг: R-11 — Game Over с экраном, перезапуск по клавише R, lock delay 500мс перед фиксацией (как в NES), best score через localStorage. Финал Модуля 5.
 
+## Модуль 3 · Этап R-11 — Game Over + lock delay (финал Модуля 5)
+- Дата: 16.05.2026
+- Сделано:
+  - **HTML** (`src/index.html`): внутри `#game-wrapper` добавлен
+    `<div id="game-over-screen" hidden>` рядом с `#game-board`.
+    Внутри — `<div class="game-over-title">GAME OVER</div>`,
+    `<div class="game-over-score-row">` (label «SCORE» + value
+    `id="game-over-score-value"`), `<div class="game-over-hint">PRESS R TO RESTART</div>`.
+    Атрибут `hidden` — стартовое состояние. В `#score-panel` добавлена
+    четвёртая `.panel-row` BEST (id `best-value`).
+  - **CSS** (`src/style.css`):
+    - `--panel-min-width: 140px` → `170px` (закрытие задела R-10:
+      четыре строки + запас под счёт 6-7 цифр).
+    - Новые переменные шрифтов Game Over: `--font-size-gameover-title: 36px`,
+      `--font-size-gameover-score: 32px`, `--font-size-gameover-hint: 14px`,
+      `--game-over-score-gap: 4px`, `--letter-spacing-gameover-hint: 2px`.
+    - Глобальное правило `[hidden] { display: none !important; }` —
+      чтобы атрибут `hidden` надёжно перебивал `display: flex`
+      у `#game-over-screen`.
+    - Новые правила: `#game-over-screen` (размер через
+      `calc(var(--cell-size) * var(--cols)/var(--rows))` — совпадает
+      с полем, layout не прыгает при swap), `.game-over-title`,
+      `.game-over-score-row` / `.game-over-score-label` / `.game-over-score-value`,
+      `.game-over-hint`.
+  - **JS** (`src/game.js`):
+    - **Новые константы:** `LOCK_DELAY_MS = 500`,
+      `BEST_SCORE_KEY = 'tetris-vault-best-score'`.
+    - **Новые state-переменные:** `lockDelayTimer = null`,
+      `bestScore = 0`, `isSoftDropping = false`, `isGameOver = false`.
+    - **Новые DOM-ссылки (закэшированы):** `bestEl`, `gameBoardEl`,
+      `gameOverScreenEl`, `gameOverScoreEl`.
+    - **Lock delay (NES-канон):**
+      - `armLockDelay()` — `setTimeout(performLock, LOCK_DELAY_MS)`
+        если ещё не активен. Сами движения НЕ перезапускают
+        (никакого «infinite stall» из современного SRS).
+      - `cancelLockDelay()` — clearTimeout + `lockDelayTimer = null`.
+      - `performLock()` — что делает таймер по истечении:
+        `lockDelayTimer = null` → `freezePiece` → `applyCleared`
+        → `spawnNewPiece` → проверка Game Over (`canMove(0,0)`)
+        → `drawBoard`.
+    - **Game Over:**
+      - `triggerGameOver()` — `isGameOver = true`, clearInterval(fallTimer)
+        + `fallTimer = null`, `cancelLockDelay()`, обновление `bestScore`
+        и `saveBestScore` (если побит), `drawScorePanel`,
+        запись итогового `score` в `gameOverScoreEl`, swap
+        `gameBoardEl.hidden = true` / `gameOverScreenEl.hidden = false`.
+      - `resetGame()` — `cancelLockDelay()` (страховка), сброс state
+        партии (score / linesTotal / level / isSoftDropping = 0),
+        очистка `stack` через `stack[r] = Array(COLS).fill(null)`,
+        `currentBag = []`, `spawnNewPiece()`, swap экранов обратно,
+        `drawBoard` + `drawScorePanel`, `startFallTimer(computeFallInterval(level))`.
+    - **localStorage best score:**
+      - `loadBestScore()` — try/catch вокруг getItem + parseInt
+        с фоллбэком на 0 (защита от NaN, отрицательных значений,
+        приватного режима браузера).
+      - `saveBestScore(value)` — try/catch вокруг setItem; в catch
+        намеренно пусто (без console.warn — чтобы не пугать в
+        приватном режиме).
+      - Используется в startup (один раз: `bestScore = loadBestScore()`)
+        и в `triggerGameOver` (если score побил).
+    - **Изменения существующих функций (все с guards `if (isGameOver) return;`):**
+      - `applyCleared`: при level-up `startFallTimer(isSoftDropping ? FAST_FALL_INTERVAL_MS : computeFallInterval(level))`
+        — закрытие задела R-10.
+      - `dropStep`: guard + при `canMove(1,0)` → `pieceRow++ + cancelLockDelay() + drawBoard()`;
+        иначе → `armLockDelay()` (поле НЕ перерисовывается, фигура висит).
+      - `hardDrop`: guard + `cancelLockDelay()` в начале, после spawn —
+        проверка `canMove(0,0)` → `triggerGameOver` при collision;
+        в конце — `startFallTimer(isSoftDropping ? FAST : computeFallInterval(level))`
+        — закрытие задела R-9.
+      - `tryMoveHorizontal`: guard + после успешного move
+        `if (canMove(1,0)) cancelLockDelay()`.
+      - `tryRotate`: guard + аналогичная отмена lock delay
+        после успешного поворота.
+      - `drawScorePanel`: добавлено `bestEl.textContent = bestScore`.
+      - `keydown`: после preventDefault — `if (isGameOver) { if (KeyR && !event.repeat) resetGame(); return; }`.
+        В ↓ — `isSoftDropping = true`.
+      - `keyup`: при ↓ → `isSoftDropping = false`,
+        `if (!isGameOver) startFallTimer(computeFallInterval(level))`.
+      - Внутри `drawBoard` локальный `boardEl = document.getElementById('game-board')`
+        убран — функция работает напрямую через закэшированный
+        `gameBoardEl` (по аудиту прогона 2).
+    - **Startup:** добавлен `bestScore = loadBestScore()` перед
+      первой отрисовкой табло. Console-маяк дополнен про lock delay,
+      best score и подсказку «R to restart on Game Over».
+- Закрытие заделов:
+  - **R-9** (hardDrop не останавливает таймер перед freeze) — закрыт:
+    `hardDrop` теперь явно перезапускает fall таймер через `startFallTimer`
+    в конце функции, после spawn новой фигуры.
+  - **R-10** (`--panel-min-width: 140px` мало с 4 строками) — закрыт:
+    `--panel-min-width: 170px`.
+  - **R-10** (soft drop теряется при level-up) — закрыт: флаг
+    `isSoftDropping`, `applyCleared` сохраняет FAST если он активен.
+  - **R-10** (`FAST == MIN` на уровне 12+) — НЕ закрыт, остаётся
+    как известное ограничение архитектора (сознательный выбор:
+    soft drop = FAST_FALL_INTERVAL_MS, скорость уровня cap'ится
+    на той же отметке).
+- Аудит этапа: vault-reviewer — **два прогона**.
+  - **Прогон 1** (после кода `d475a6a`): 3 замечания (1 средний + 2 низких).
+    Высоких не было. Закрыты fix-коммитом `e9ecedd`:
+    - **низкий #1** (`gap: 4px` без переменной в `.game-over-score-row`)
+      — введена `--game-over-score-gap: 4px`.
+    - **средний #2** (`performLock`: applyCleared при level-up
+      может поднять fall-таймер, который тут же убивается
+      `triggerGameOver` — контр-интуитивно, не баг) —
+      добавлен пояснительный комментарий между freezePiece
+      и applyCleared.
+    - **низкий #3** (`drawBoard` дёргает `document.getElementById('game-board')`
+      локально вместо закэшированного `gameBoardEl`) — локальная
+      переменная убрана, функция работает напрямую через глобальный кэш.
+  - **Прогон 2** (после fix `e9ecedd`): три исправления первого прогона
+    закрыты чисто, TDZ-риска нет. Новые 3 замечания, все низкого приоритета.
+    Закрыты fix-коммитом `75f3f10`:
+    - **низкий #1** (комментарий в `spawnNewPiece` устарел: «Game Over
+      пока не обрабатываем — это будет в R-11») — переписан под
+      актуальное состояние, явно сказано что caller'ы (performLock /
+      hardDrop) делают проверку.
+    - **низкий #2** (комментарий к `applyCleared` говорит «Вызывается
+      из dropStep и hardDrop», но после R-11 dropStep делегирует
+      через performLock) — исправлено.
+    - **низкий #3** (`.game-over-hint` использует
+      `--letter-spacing-panel-label` — семантически чужое владение)
+      — введена `--letter-spacing-gameover-hint: 2px`, у подсказки
+      теперь собственная переменная.
+- Результат: при открытии `index.html` — справа от поля табло
+  с четырьмя строками (SCORE / LEVEL / LINES / BEST), BEST подтягивается
+  из localStorage. Фигура у дна висит 500 мс (lock delay) — за это
+  время можно сдвинуть/повернуть; если ушла над выемку (`canMove(1,0)`
+  снова true), таймер сбрасывается. Hard drop игнорирует lock delay,
+  фиксирует мгновенно. При collision на спавне — экран GAME OVER
+  заменяет поле, показывает итоговый счёт и подсказку. R рестартует
+  партию, обновлённый BEST сохраняется в localStorage. В Game Over
+  все игровые клавиши игнорируются, только R работает.
+  В консоли: `Vault-Tec terminal online. Seven-piece bag loaded. Stack initialised. Score panel armed. Lock delay armed. Best score loaded. Keyboard armed (←/→/↑/↓/Space, R to restart on Game Over).`
+- Хеш коммита кода R-11: d475a6a
+- Хеш fix-коммита по аудиту прогона 1 (средний + 2 низких): e9ecedd
+- Хеш fix-коммита по аудиту прогона 2 (3 низких): 75f3f10
+- Хеш docs-коммита R-10 (догон): 3b6a10d
+
+### Заделы на R-12 (по рекомендациям vault-reviewer)
+1. **Упростить шапку `game.js`** — сейчас в начале файла
+   многострочный комментарий с целями этапа R-11 (наследие
+   итеративной разработки). Перед R-12 (стилизация / полиш) имеет
+   смысл оставить только актуальное описание текущего состояния
+   модуля; история этапов уже в `PROGRESS.md`, дублирование не
+   нужно.
+2. **`--border-ui: 1px solid var(--color-green)`** —
+   значение `1px solid var(--color-green)` повторяется в трёх
+   местах `style.css`: рамка клетки `.cell`, рамка табло `#score-panel`,
+   рамка экрана `#game-over-screen`. Если в R-12 полиш затронет
+   рамки (например, толщина 2px или стиль `dashed`), править придётся
+   в трёх местах. Кандидат на одну CSS-переменную — но только если
+   R-12 действительно будет трогать рамки.
+
+Оба пункта — низкий приоритет, не блокируют R-12. Зафиксированы
+здесь, чтобы не потерялись.
+
+- Следующий шаг: R-12 — стилизация / полиш. Финал учебной игры
+  до упаковки в Electron.
+
